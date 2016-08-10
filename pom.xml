@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.ixeption.spark.titanic</groupId>
+    <artifactId>dota2-analytics</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <properties>
+        <encoding>UTF-8</encoding>
+        <spark-version>2.0.0</spark-version>
+        <scala-version>2.11.8</scala-version>
+    </properties>
+
+    <dependencies>
+        <!-- hadoop and spark -->
+        <dependency>
+            <version>${spark-version}</version>
+            <artifactId>spark-sql_2.11</artifactId>
+            <groupId>org.apache.spark</groupId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-mllib_2.11</artifactId>
+            <version>${spark-version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <version>${spark-version}</version>
+            <artifactId>spark-core_2.11</artifactId>
+            <groupId>org.apache.spark</groupId>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-hdfs</artifactId>
+            <version>2.5.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+            <version>2.5.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-core</artifactId>
+            <version>1.2.1</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+            <version>${scala-version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.6.2</version>
+        </dependency>
+        <dependency>
+            <groupId>com.databricks</groupId>
+            <artifactId>spark-avro_2.11</artifactId>
+            <version>3.0.0</version>
+        </dependency>
+
+
+        <!-- https://mvnrepository.com/artifact/io.spray/spray-client_2.11 -->
+        <dependency>
+            <groupId>io.spray</groupId>
+            <artifactId>spray-client_2.11</artifactId>
+            <version>1.3.3</version>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/io.spray/spray-json_2.11 -->
+        <dependency>
+            <groupId>io.spray</groupId>
+            <artifactId>spray-json_2.11</artifactId>
+            <version>1.3.2</version>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/com.typesafe.akka/akka-actor_2.11 -->
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-actor_2.11</artifactId>
+            <version>2.4.7</version>
+        </dependency>
+
+
+
+
+        <!-- TEST -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.8.1</version>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <finalName>${project.artifactId}</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.scala-tools</groupId>
+                <artifactId>maven-scala-plugin</artifactId>
+                <version>2.15.2</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>2.2.1</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.0</version>
+                <configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.12.4</version>
+                <configuration>
+                    <skipTests>true</skipTests>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>2.4.3</version>
+                <configuration>
+                    <finalName>${project.artifactId}</finalName>
+                    <transformers>
+                        <transformer
+                                implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer">
+                        </transformer>
+                    </transformers>
+                    <filters>
+                        <filter>
+                            <artifact>*:*</artifact>
+                            <excludes>
+                                <exclude>META-INF/*.SF</exclude>
+                                <exclude>META-INF/*.DSA</exclude>
+                                <exclude>META-INF/*.RSA</exclude>
+                            </excludes>
+                        </filter>
+                    </filters>
+                    <artifactSet>
+                        <excludes>
+                            <exclude>org.apache.hadoop:*</exclude>
+                            <exclude>org.apache.spark:*</exclude>
+                        </excludes>
+                    </artifactSet>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <transformers>
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>reference.conf</resource>
+                                </transformer>
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.handlers</resource>
+                                </transformer>
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.schemas</resource>
+                                </transformer>
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <!--<mainClass>com.twitter.scalding.Tool</mainClass>-->
+                                    <mainClass>SimpleJob</mainClass>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+    <repositories>
+        <repository>
+            <id>cloudera</id>
+            <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+        </repository>
+        <repository>
+            <id>conjars</id>
+            <url>http://conjars.org/repo</url>
+        </repository>
+    </repositories>
+
+</project>
