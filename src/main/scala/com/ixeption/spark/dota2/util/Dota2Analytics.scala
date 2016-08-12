@@ -1,6 +1,6 @@
 package com.ixeption.spark.dota2.util
 
-import org.apache.spark.ml.classification.{MultilayerPerceptronClassifier, NaiveBayes}
+import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 import org.apache.spark.ml.clustering.KMeans
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature.LabeledPoint
@@ -18,7 +18,7 @@ import scala.math.BigDecimal.RoundingMode
 object Dota2Analytics {
 
   val isWinner = udf((radiant_win: Boolean, player_slot: Double) => {
-    val isRadian = if (player_slot >= 128) true else false
+    val isRadian = if (player_slot < 128) true else false
     radiant_win == isRadian
   })
   val seqToSparseBag = udf((seq: Seq[Double], int: Int) => {
@@ -51,7 +51,7 @@ object Dota2Analytics {
 
   }
 
-  def findMostPlayedHeros(matchesDf: DataFrame, heros: DataFrame): DataFrame = {
+  def findMostPlayedHeros(matchesDf: DataFrame, heros: DataFrame): Unit = {
     import matchesDf.sqlContext.implicits._
     val herosIdName = heros.select($"col.id", $"col.localized_name")
     val playersDf: DataFrame = matchesDf.select(explode(matchesDf("col.players"))).toDF()
@@ -66,7 +66,7 @@ object Dota2Analytics {
     val totalCount = playersDf.count().toDouble / 100.0
     val percentage = heroCounts.select($"hero_id", $"localized_name", ($"count" / totalCount).as("percent"))
     percentage.show(10)
-    percentage
+
   }
 
   def predictWinByItems(matchesDf: DataFrame, items: DataFrame): Unit = {
@@ -117,7 +117,7 @@ object Dota2Analytics {
     //    println("Test Error = " + testErr)
   }
 
-  def predictWinByTeam(matchesDf: DataFrame, heros: DataFrame): DataFrame = {
+  def predictWinByTeam(matchesDf: DataFrame, heros: DataFrame): Unit = {
     import matchesDf.sqlContext.implicits._
     val playerWithWinStatus = matchesDf
       .select($"col.match_id", $"col.radiant_win", explode($"col.players").as("players"))
@@ -154,7 +154,7 @@ object Dota2Analytics {
     val evaluator = new MulticlassClassificationEvaluator()
       .setMetricName("accuracy")
     println("Accuracy: " + evaluator.evaluate(predictionAndLabels))
-    playerWithWinStatus
+
   }
 
   def clusterHeros(matchesDf: DataFrame, heros: DataFrame): Unit = {
@@ -230,12 +230,12 @@ object Dota2Analytics {
       .select($"col.match_id", explode($"col.players").as("players"))
       .cache()
 
-    val winnerTeam = explodedDf.filter($"players.player_slot" > 128)
+    val winnerTeam = explodedDf.filter($"players.player_slot" < 128)
       .groupBy($"match_id")
       .agg(collect_list($"players.hero_id").as("winnerTeam"))
       .cache()
 
-    val looserTeam = explodedDf.filter($"players.player_slot" <= 128)
+    val looserTeam = explodedDf.filter($"players.player_slot" >= 128)
       .groupBy($"match_id")
       .agg(collect_list($"players.hero_id").as("looserTeam"))
       .cache()
@@ -245,11 +245,13 @@ object Dota2Analytics {
       .drop(looserTeam("match_id"))
       .select("match_id", "winnerTeam", "looserTeam")
 
+    //joined.coalesce(1).write.json("output/joined")
+
     val winVecs = joined.select(getMatchVec($"winnerTeam", $"looserTeam", lit(heroCount)).as("features"))
-      .withColumn("label", lit("1.0").cast(DoubleType))
+      .withColumn("label", lit(1.0))
 
     val looseVecs = joined.select(getMatchVec($"looserTeam", $"winnerTeam", lit(heroCount)).as("features"))
-      .withColumn("label", lit("0.0").cast(DoubleType))
+      .withColumn("label", lit(0.0))
 
     val allvecs = looseVecs.union(winVecs)
     val splits = allvecs.randomSplit(Array(0.7, 0.3))
@@ -257,14 +259,14 @@ object Dota2Analytics {
 
     val layers = Array[Int](heroCount * 2, 15, 2)
 
-    //    val trainer = new MultilayerPerceptronClassifier()
-    //      .setLayers(layers)
-    //      .setBlockSize(64)
-    //      .setSeed(1234L)
-    //      .setTol(1E-4)
-    //      .setMaxIter(100)
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(64)
+      .setSeed(1234L)
+      .setTol(1E-4)
+      .setMaxIter(100)
 
-    val trainer = new NaiveBayes()
+    //val trainer = new NaiveBayes()
 
     val model = trainer.fit(trainingData)
     val result: DataFrame = model.transform(testData)
@@ -275,4 +277,5 @@ object Dota2Analytics {
     println("Accuracy: " + evaluator.evaluate(predictionAndLabels))
 
   }
+
 }
