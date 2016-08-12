@@ -1,6 +1,6 @@
 package com.ixeption.spark.dota2.util
 
-import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
+import org.apache.spark.ml.classification.{MultilayerPerceptronClassifier, NaiveBayes}
 import org.apache.spark.ml.clustering.KMeans
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature.LabeledPoint
@@ -25,6 +25,13 @@ object Dota2Analytics {
     val occurances = seq.groupBy(l => l).map(t => (t._1.toInt, t._2.length.toDouble)).toSeq
     Vectors.sparse(int, occurances)
   })
+
+  val getMatchVec = udf((seq: Seq[Double], seq2: Seq[Double], size: Int) => {
+    val occurances1 = seq.groupBy(l => l).map(t => (t._1.toInt, t._2.length.toDouble)).toSeq
+    val occurances2 = seq2.groupBy(l => l).map(t => (t._1.toInt, t._2.length.toDouble)).toSeq
+    Vectors.sparse(size + size, occurances1 ++ occurances2)
+  })
+
   val seqToDense = udf((array: Seq[Double]) => {
     Vectors.dense(array.toArray)
   })
@@ -131,7 +138,7 @@ object Dota2Analytics {
     val splits = winMatchVecDf.randomSplit(Array(0.7, 0.3))
     val (trainingData, testData) = (splits(0), splits(1))
 
-    val layers = Array[Int](111, 10, 10, 2)
+    val layers = Array[Int](heroCount, 10, 10, 2)
 
     val trainer = new MultilayerPerceptronClassifier()
       .setLayers(layers)
@@ -148,16 +155,6 @@ object Dota2Analytics {
       .setMetricName("accuracy")
     println("Accuracy: " + evaluator.evaluate(predictionAndLabels))
     playerWithWinStatus
-  }
-
-  def run(spark: SparkSession, matchesDf: DataFrame, heros: DataFrame, items: DataFrame) {
-    matchesDf.printSchema()
-    //predictWinByItems(matchesDf, items)
-    //predictWinByTeam(matchesDf, heros)
-    //findMostPlayedHeros(matchesDf, heros)
-    clusterHeros(matchesDf, heros)
-
-
   }
 
   def clusterHeros(matchesDf: DataFrame, heros: DataFrame): Unit = {
@@ -207,13 +204,75 @@ object Dota2Analytics {
 
 
     pretty.show()
-    transform.coalesce(1).write.option("header", "true").csv("output/resultRoles")
-
+    pretty.coalesce(1).write.option("header", "true").csv("output/resultRoles")
 
     println("Number of records " + count)
     println("Clusters found")
     model.clusterCenters.foreach(println)
+  }
 
+  def run(spark: SparkSession, matchesDf: DataFrame, heros: DataFrame, items: DataFrame) {
+    matchesDf.printSchema()
+    //predictWinByItems(matchesDf, items)
+    //predictWinByTeam(matchesDf, heros)
+    //findMostPlayedHeros(matchesDf, heros)
+    //clusterHeros(matchesDf, heros)
+    predictWinByBothTeams(matchesDf, heros)
+
+
+  }
+
+  def predictWinByBothTeams(matchesDf: DataFrame, heros: DataFrame): Unit = {
+    import matchesDf.sqlContext.implicits._
+    val heroCount = heros.count().toInt
+    val explodedDf = matchesDf
+      .filter($"col.radiant_win" === true)
+      .select($"col.match_id", explode($"col.players").as("players"))
+      .cache()
+
+    val winnerTeam = explodedDf.filter($"players.player_slot" > 128)
+      .groupBy($"match_id")
+      .agg(collect_list($"players.hero_id").as("winnerTeam"))
+      .cache()
+
+    val looserTeam = explodedDf.filter($"players.player_slot" <= 128)
+      .groupBy($"match_id")
+      .agg(collect_list($"players.hero_id").as("looserTeam"))
+      .cache()
+
+    val joined = winnerTeam
+      .join(looserTeam, winnerTeam("match_id") === looserTeam("match_id"))
+      .drop(looserTeam("match_id"))
+      .select("match_id", "winnerTeam", "looserTeam")
+
+    val winVecs = joined.select(getMatchVec($"winnerTeam", $"looserTeam", lit(heroCount)).as("features"))
+      .withColumn("label", lit("1.0").cast(DoubleType))
+
+    val looseVecs = joined.select(getMatchVec($"looserTeam", $"winnerTeam", lit(heroCount)).as("features"))
+      .withColumn("label", lit("0.0").cast(DoubleType))
+
+    val allvecs = looseVecs.union(winVecs)
+    val splits = allvecs.randomSplit(Array(0.7, 0.3))
+    val (trainingData, testData) = (splits(0), splits(1))
+
+    val layers = Array[Int](heroCount * 2, 15, 2)
+
+    //    val trainer = new MultilayerPerceptronClassifier()
+    //      .setLayers(layers)
+    //      .setBlockSize(64)
+    //      .setSeed(1234L)
+    //      .setTol(1E-4)
+    //      .setMaxIter(100)
+
+    val trainer = new NaiveBayes()
+
+    val model = trainer.fit(trainingData)
+    val result: DataFrame = model.transform(testData)
+
+    val predictionAndLabels = result.select("prediction", "label")
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setMetricName("accuracy")
+    println("Accuracy: " + evaluator.evaluate(predictionAndLabels))
 
   }
 }
